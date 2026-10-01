@@ -1,0 +1,5 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+google-cloud-aiplatform[agent_engines]>=1.71.1
+httpx>=0.27,<1
+redis>=5,<7
