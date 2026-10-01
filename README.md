@@ -1,45 +1,56 @@
 # Chat Widget Backend
 
-FastAPI service that streams Vertex AI responses for the chat widget and manages server-side conversation sessions.
+FastAPI service that manages Vertex AI agent sessions and streams chat responses to the widget as Server-Sent Events (SSE).
 
 ## Project layout
 
-See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for the module overview. The frontend is a separate sibling project at `../chat-widget-frontend/`.
+See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for the module map. The frontend is a separate sibling project at `../chat-widget-frontend/`.
 
-## Setup
+## Requirements and setup
 
-From this directory, create a virtual environment, install dependencies, and configure local settings:
+Use Python 3.11 or newer. Python 3.9 is unsupported by current Google client libraries and the source uses union type annotations that require Python 3.10 or newer.
+
+Linux / Amazon Linux:
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip check
+```
+
+Windows PowerShell:
 
 ```powershell
-py -m venv .venv
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
+.\.venv\Scripts\python.exe -m pip check
 ```
 
-Set the Google Cloud project, location, Vertex AI agent resource, and any Redis settings in `.env`. Keep real credentials out of source control. If Redis is unset, session IDs use process memory, which is suitable only for local development.
+Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `VERTEX_AI_AGENT_RESOURCE`, `REDIS_URL`, and `CORS_ALLOWED_ORIGINS`. Keep `.env` and credentials out of source control.
 
-## Run the API
+## Run and test the API
 
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 8000
+```bash
+python -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 8000
 ```
 
-The API health check is available at `http://127.0.0.1:8000/health`. The frontend’s local API URL is configured separately in `../chat-widget-frontend/.env` as `VITE_API_URL`.
+Check `http://127.0.0.1:8000/health`. The chat endpoint is `POST /api/chat` and returns an SSE stream; session deletion is `DELETE /api/session`. `script.py` remains as a compatibility entry point, but new commands should use `app.main:app`.
 
-## Run the latency benchmark
+Run the latency benchmark from this directory with a running API:
 
-The benchmark sends the prompt set to the `dam`, `eponymos`, and `media_center` environments and measures streaming latency:
-
-```powershell
-.\.venv\Scripts\python.exe benchmark.py --base-url http://127.0.0.1:8000 --run-id smoke --output smoke.jsonl
+```bash
+python benchmark.py --base-url http://127.0.0.1:8000 --run-id smoke --output smoke.jsonl
 ```
 
-Use a fresh run ID and output path for each run. `benchmark_prompts.json` contains the prompts used by default.
+## Authentication and sessions
 
-## Compatibility
+The Google Python client uses Application Default Credentials (ADC). For a temporary local or smoke test, ADC can be created with `gcloud auth application-default login`; set its quota project to the same Google Cloud project used by the app. Do not use a personal user login as the long-term EC2 service identity. Use AWS-to-Google Workload Identity Federation for production.
 
-`script.py` remains available for older commands:
+If `REDIS_URL` is unset, the backend logs a warning and stores session IDs in process memory. Configure durable Redis for production or session continuity will be lost on restart and will not be shared across instances.
 
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn script:app --env-file .env --host 127.0.0.1 --port 8000
-```
+## EC2 deployment
+
+See [docs/EC2_DEPLOYMENT.md](docs/EC2_DEPLOYMENT.md) for the Amazon Linux 2023, Python 3.11, ADC testing, systemd, health-check, logs, and service-control steps.

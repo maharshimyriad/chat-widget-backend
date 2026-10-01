@@ -19,6 +19,6 @@
 
 ## Runtime behavior
 
-The backend session stores conversational state for the Vertex AI agent. It is not a transcript API and does not restore messages to the widget after refresh. The frontend remains responsible for rendering the transcript and does not use browser `localStorage` for persistence.
+The backend session stores conversational state for the Vertex AI agent. It is not a transcript API and does not restore messages to the widget after refresh. The frontend stores a per-client anonymous visitor ID in browser `localStorage` so the same visitor can reuse their session, but it does not persist the chat transcript.
 
 For setup, run commands, and environment variables, see [the backend README](../README.md).
