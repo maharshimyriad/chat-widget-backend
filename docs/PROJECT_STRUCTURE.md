@@ -5,7 +5,7 @@
 ## Backend files
 
 - `app/main.py` assembles the FastAPI application and middleware.
-- `app/config.py` loads environment settings and CORS origins.
+- `app/config.py` loads Vertex AI environment settings.
 - `app/schemas.py` defines API request models.
 - `app/vertex_client.py` wraps Vertex AI access and streaming.
 - `app/routes/health.py` provides health and demo routes.

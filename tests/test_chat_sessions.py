@@ -73,6 +73,20 @@ class ChatSessionContractTests(unittest.TestCase):
             },
         )
 
+    def test_cors_allows_unregistered_embedding_origin_without_credentials(self):
+        response = self.client.options(
+            "/chat",
+            headers={
+                "Origin": "https://new-customer.example",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("access-control-allow-origin"), "*")
+        self.assertNotIn("access-control-allow-credentials", response.headers)
+
     def test_reuses_widget_session_across_messages(self):
         first = self.send()
         first_events = parse_events(first.text)

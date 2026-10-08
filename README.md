@@ -29,7 +29,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip check
 ```
 
-Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `VERTEX_AI_AGENT_RESOURCE`, and `CORS_ALLOWED_ORIGINS`. Keep `.env` and credentials out of source control.
+Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and `VERTEX_AI_AGENT_RESOURCE`. Keep `.env` and credentials out of source control.
 
 ## Run and test the API
 
@@ -37,7 +37,7 @@ Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOU
 python -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 8000
 ```
 
-Check `http://127.0.0.1:8000/health`. `POST /api/chat` accepts `user_id`, `environment_id`, `message`, and `session_id`, then streams JSON `session`, `message`, `error`, and `done` events. `GET /api/history` reads messages from the Agent Engine session. The widget owns session IDs in local storage; the backend does not store session IDs or transcript copies. `script.py` remains as a compatibility entry point, but new commands should use `app.main:app`.
+Check `http://127.0.0.1:8000/health`. `POST /api/chat` accepts `user_id`, `environment_id`, `message`, and `session_id`, then streams JSON `session`, `message`, `error`, and `done` events. `GET /api/history` reads messages from the Agent Engine session. CORS is open for public widget embedding and does not use browser credentials. The widget owns session IDs in local storage; the backend does not store session IDs or transcript copies. `script.py` remains as a compatibility entry point, but new commands should use `app.main:app`.
 
 Run the latency benchmark from this directory with a running API:
 

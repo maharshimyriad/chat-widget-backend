@@ -16,18 +16,3 @@ ALLOWED_ENVIRONMENTS = list(ENVIRONMENT_RESOURCES)
 
 APP_TITLE = "Chat Widget API"
 APP_VERSION = "1.0.0"
-
-
-def get_cors_origins() -> list[str]:
-    default_origins = [
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-    configured = os.getenv("CORS_ALLOWED_ORIGINS", "")
-    return default_origins + [
-        item.strip() for item in configured.split(",") if item.strip()
-    ]

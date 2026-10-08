@@ -35,7 +35,6 @@ Create `.env` from `.env.example` and set the real project, location, Vertex AI 
 - `GOOGLE_CLOUD_PROJECT`: Google Cloud project ID used for API/quota context.
 - `GOOGLE_CLOUD_LOCATION`: Vertex AI location.
 - `VERTEX_AI_AGENT_RESOURCE`: deployed reasoning engine resource path.
-- `CORS_ALLOWED_ORIGINS`: comma-separated browser origins, without paths or trailing slashes.
 
 The frontend bundle separately needs `VITE_API_URL` set to the public HTTPS API URL ending in `/api/chat` when it is built.
 
@@ -132,7 +131,7 @@ sudo systemctl enable --now chat-widget-backend
 
 ## 6. Expose the API and deploy the widget
 
-The service intentionally listens on `127.0.0.1:8000`. Put Nginx or another reverse proxy in front of it, configure TLS, and proxy the public API hostname to this local listener. Do not expose port 8000 directly to the internet. Set `CORS_ALLOWED_ORIGINS` to the exact HTTPS origin(s) of websites embedding the widget, then restart the service.
+The service intentionally listens on `127.0.0.1:8000`. Put Nginx or another reverse proxy in front of it, configure TLS, and proxy the public API hostname to this local listener. Do not expose port 8000 directly to the internet. CORS permits public widget embedding from any origin without browser credentials; apply rate limiting at the reverse proxy or API layer to protect the public chat endpoint.
 
 Build the widget from the frontend repository with the public backend URL:
 
@@ -151,5 +150,5 @@ Replace the example hostname. `npm ci` requires `package.json` and `package-lock
 - Google Cloud CLI 587.0.0 was installed under `/home/ec2-user/google-cloud-sdk`; the app does not require the CLI at runtime when production ADC is configured properly.
 - `chat-widget-backend.service` was enabled and reported `active (running)`, bound to `127.0.0.1:8000`.
 - Session persistence and history restoration are handled by Agent Engine, with the widget retaining the session ID in local storage.
-- Complete the authenticated Vertex AI stream test, public reverse-proxy/TLS setup, production Workload Identity Federation, and frontend origin/CORS test before declaring deployment ready.
+- Complete the Vertex AI stream test, public reverse-proxy/TLS setup, production Workload Identity Federation, and public-origin widget test before declaring deployment ready.
 - At the time this runbook was written, frontend `package.json` requested Vite `^8.3.0` while `package-lock.json` pinned `5.4.21`; `npm ci --dry-run` failed because of that mismatch. Reconcile and test both files, then commit them together before building on the server.
