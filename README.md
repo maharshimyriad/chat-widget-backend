@@ -29,7 +29,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip check
 ```
 
-Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and `VERTEX_AI_AGENT_RESOURCE`. Keep `.env` and credentials out of source control.
+Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and `VERTEX_AI_AGENT_RESOURCE`. For an allowlist that can change without restarting, copy `allowed-origins.example.txt` to a server path, set `CORS_ALLOWED_ORIGINS_FILE` to that path, and edit one origin per line. Restart once after setting the file path; later edits are picked up automatically. Otherwise, use `CORS_ALLOWED_ORIGINS` for a static `*` or comma-separated origin list. If both settings are unset, browser-origin requests are rejected. Browser credentials are disabled in every mode. Keep `.env`, credentials, and the live origins file out of source control.
 
 ## Run and test the API
 
@@ -37,7 +37,7 @@ Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOU
 python -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 8000
 ```
 
-Check `http://127.0.0.1:8000/health`. `POST /api/chat` accepts `user_id`, `environment_id`, `message`, and `session_id`, then streams JSON `session`, `message`, `error`, and `done` events. `GET /api/history` reads messages from the Agent Engine session. CORS is open for public widget embedding and does not use browser credentials. The widget owns session IDs in local storage; the backend does not store session IDs or transcript copies. `script.py` remains as a compatibility entry point, but new commands should use `app.main:app`.
+Check `http://127.0.0.1:8000/health`. `POST /api/chat` accepts `user_id`, `environment_id`, `message`, and `session_id`, then streams JSON `session`, `message`, `error`, and `done` events. `GET /api/history` reads messages from the Agent Engine session. CORS stays non-credentialed so the widget can display a readable 403 for an unlisted origin. Origin validation is not API authentication. The widget owns session IDs in local storage; the backend does not store session IDs or transcript copies. `script.py` remains as a compatibility entry point, but new commands should use `app.main:app`.
 
 Run the latency benchmark from this directory with a running API:
 

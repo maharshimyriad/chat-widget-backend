@@ -1,9 +1,14 @@
 import json
+import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.cors import add_cors_middleware
 from app.main import app
 from app.routes import chat as chat_route, session as session_route
 
@@ -74,7 +79,10 @@ class ChatSessionContractTests(unittest.TestCase):
         )
 
     def test_cors_allows_unregistered_embedding_origin_without_credentials(self):
-        response = self.client.options(
+        cors_app = FastAPI()
+        cors_app.post("/chat")(lambda: {"ok": True})
+        add_cors_middleware(cors_app, "*")
+        response = TestClient(cors_app).options(
             "/chat",
             headers={
                 "Origin": "https://new-customer.example",
@@ -86,6 +94,81 @@ class ChatSessionContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers.get("access-control-allow-origin"), "*")
         self.assertNotIn("access-control-allow-credentials", response.headers)
+
+    def test_unset_cors_origins_rejects_browser_origin(self):
+        cors_app = FastAPI()
+        cors_app.post("/chat")(lambda: {"ok": True})
+        with patch.dict(os.environ, {}, clear=True):
+            add_cors_middleware(cors_app)
+        response = TestClient(cors_app).post(
+            "/chat",
+            headers={"Origin": "http://localhost:5173"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["detail"],
+            "This site is not authorized to use the chat widget.",
+        )
+        self.assertEqual(response.headers.get("access-control-allow-origin"), "*")
+
+    def test_cors_can_switch_to_an_exact_origin_allowlist(self):
+        cors_app = FastAPI()
+        cors_app.post("/chat")(lambda: {"ok": True})
+        add_cors_middleware(cors_app, "https://approved.example, https://another.example")
+        client = TestClient(cors_app)
+        allowed = client.options(
+            "/chat",
+            headers={
+                "Origin": "https://approved.example",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        denied_preflight = client.options(
+            "/chat",
+            headers={
+                "Origin": "https://unlisted.example",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        denied_request = client.post("/chat", headers={"Origin": "https://unlisted.example"})
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(allowed.headers.get("access-control-allow-origin"), "*")
+        self.assertEqual(denied_preflight.status_code, 200)
+        self.assertEqual(denied_request.status_code, 403)
+        self.assertEqual(denied_request.json()["detail"], "This site is not authorized to use the chat widget.")
+        self.assertEqual(denied_request.headers.get("access-control-allow-origin"), "*")
+        self.assertNotIn("access-control-allow-credentials", allowed.headers)
+        client.close()
+
+    def test_cors_origin_file_reloads_without_restarting_app(self):
+        with TemporaryDirectory() as directory:
+            origins_file = Path(directory) / "allowed-origins.txt"
+            origins_file.write_text("https://first.example\n", encoding="utf-8")
+            cors_app = FastAPI()
+            cors_app.post("/chat")(lambda: {"ok": True})
+            with patch.dict(
+                os.environ,
+                {"CORS_ALLOWED_ORIGINS_FILE": str(origins_file)},
+                clear=True,
+            ):
+                add_cors_middleware(cors_app)
+            client = TestClient(cors_app)
+
+            first_allowed = client.post("/chat", headers={"Origin": "https://first.example"})
+            origins_file.write_text("https://second.example\n", encoding="utf-8")
+            second_allowed = client.post("/chat", headers={"Origin": "https://second.example"})
+            first_denied = client.post("/chat", headers={"Origin": "https://first.example"})
+
+            self.assertEqual(first_allowed.status_code, 200)
+            self.assertEqual(second_allowed.status_code, 200)
+            self.assertEqual(first_denied.status_code, 403)
+            self.assertEqual(
+                first_denied.json()["detail"],
+                "This site is not authorized to use the chat widget.",
+            )
+            client.close()
 
     def test_reuses_widget_session_across_messages(self):
         first = self.send()

@@ -30,11 +30,13 @@ The import should print `Chat Widget API`. Chat sessions and their history are s
 
 ## 2. Configure backend environment
 
-Create `.env` from `.env.example` and set the real project, location, Vertex AI resource, and website origins. Do not commit `.env`, ADC credentials, or service-account key files.
+Create `.env` from `.env.example` and set the real project, location, Vertex AI resource, and CORS settings. Do not commit `.env`, ADC credentials, or service-account key files.
 
 - `GOOGLE_CLOUD_PROJECT`: Google Cloud project ID used for API/quota context.
 - `GOOGLE_CLOUD_LOCATION`: Vertex AI location.
 - `VERTEX_AI_AGENT_RESOURCE`: deployed reasoning engine resource path.
+- `CORS_ALLOWED_ORIGINS_FILE`: optional path to a live-reloaded, one-origin-per-line allowlist. When set, it takes precedence over `CORS_ALLOWED_ORIGINS`; edits apply on the next request without restarting. Keep the file readable by `ec2-user` and outside the repository.
+- `CORS_ALLOWED_ORIGINS`: static alternative: `*` to accept widgets from any origin, or a comma-separated list of exact origins (scheme, host, and optional port). If both settings are unset, browser-origin requests are rejected. Origin validation is not API authentication.
 
 The frontend bundle separately needs `VITE_API_URL` set to the public HTTPS API URL ending in `/api/chat` when it is built.
 
@@ -131,7 +133,7 @@ sudo systemctl enable --now chat-widget-backend
 
 ## 6. Expose the API and deploy the widget
 
-The service intentionally listens on `127.0.0.1:8000`. Put Nginx or another reverse proxy in front of it, configure TLS, and proxy the public API hostname to this local listener. Do not expose port 8000 directly to the internet. CORS permits public widget embedding from any origin without browser credentials; apply rate limiting at the reverse proxy or API layer to protect the public chat endpoint.
+The service intentionally listens on `127.0.0.1:8000`. Put Nginx or another reverse proxy in front of it, configure TLS, and proxy the public API hostname to this local listener. Do not expose port 8000 directly to the internet. For production site restrictions without restart-per-client, configure `CORS_ALLOWED_ORIGINS_FILE` once, then edit the external origins file; the widget receives a readable 403 for unlisted sites. Apply rate limiting at the reverse proxy or API layer because origin validation is not authentication.
 
 Build the widget from the frontend repository with the public backend URL:
 

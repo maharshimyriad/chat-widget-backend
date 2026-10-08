@@ -1,0 +1,15 @@
+# CORS allowlist for websites allowed to use the chat API.
+#
+# Copy this file to the server path configured by CORS_ALLOWED_ORIGINS_FILE.
+# The backend checks this file on requests and reloads it when it changes, so
+# adding or removing an origin does not require restarting the API.
+#
+# Add one exact origin per line: scheme + hostname + optional port.
+# Do not include a path, trailing slash, or wildcard. For example:
+# https://chat.customer.example
+# http://localhost:5173
+# http://localhost:5174
+# http://127.0.0.1:5173
+# http://127.0.0.1:5174
+#
+# Uncomment and replace the examples with the origins you approve.
