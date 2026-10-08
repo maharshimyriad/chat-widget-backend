@@ -45,17 +45,18 @@ def consume_sse_block(
     except json.JSONDecodeError:
         payload = raw_data
 
-    if event_name == "error":
+    if event_name == "session" and isinstance(payload, dict):
+        result["session_id"] = payload.get("session_id")
+        result["event_types"].add("session")
+    elif event_name == "error":
         result["error"] = payload.get("message", "Stream returned an error") if isinstance(payload, dict) else str(payload)
         result["event_types"].add("error")
-    elif event_name == "function_call":
-        result["event_types"].add("function_call")
-    elif isinstance(payload, dict) and payload.get("text"):
+    elif event_name == "message" and isinstance(payload, dict) and payload.get("text"):
         result["event_types"].add("text")
         if result["time_to_first_text_ms"] is None:
             result["time_to_first_text_ms"] = round((now - started) * 1000, 1)
-    elif not (isinstance(payload, dict) and payload.get("done")):
-        result["event_types"].add("other")
+    elif event_name == "done":
+        result["event_types"].add("done")
 
 
 async def measure_prompt(
@@ -65,6 +66,7 @@ async def measure_prompt(
     environment: str,
     prompt_index: int,
     prompt: str,
+    session_id: str | None,
 ) -> dict[str, Any]:
     started = perf_counter()
     result: dict[str, Any] = {
@@ -72,6 +74,7 @@ async def measure_prompt(
         "prompt_index": prompt_index,
         "prompt": prompt,
         "request_id": None,
+        "session_id": session_id,
         "status_code": None,
         "time_to_first_event_ms": None,
         "time_to_first_text_ms": None,
@@ -87,9 +90,9 @@ async def measure_prompt(
             f"{base_url}/chat",
             json={
                 "user_id": user_id,
-                "environment": environment,
+                "environment_id": environment,
                 "message": prompt,
-                "profile": {"name": "", "role": "", "organization": ""},
+                "session_id": session_id,
             },
             headers={"Accept": "text/event-stream"},
         ) as response:
@@ -117,19 +120,6 @@ async def measure_prompt(
         result["event_types"] = sorted(result["event_types"])
 
     return result
-
-
-async def delete_session(
-    client: httpx.AsyncClient,
-    base_url: str,
-    user_id: str,
-    environment: str,
-) -> None:
-    response = await client.delete(
-        f"{base_url}/session",
-        json={"user_id": user_id, "environment": environment},
-    )
-    response.raise_for_status()
 
 
 def make_summary(results: list[dict[str, Any]], run_id: str) -> dict[str, Any]:
@@ -182,22 +172,21 @@ async def run_benchmark(args: argparse.Namespace) -> None:
         async with httpx.AsyncClient(timeout=timeout) as client:
             for environment in ENVIRONMENTS:
                 user_id = f"{args.user_id}-{run_id}-{environment}"
-                await delete_session(client, base_url, user_id, environment)
-                try:
-                    for index, prompt in enumerate(prompts, start=1):
-                        result = await measure_prompt(
-                            client,
-                            base_url,
-                            user_id,
-                            environment,
-                            index,
-                            prompt,
-                        )
-                        result["run_id"] = run_id
-                        results.append(result)
-                        emit({"record_type": "request", **result})
-                finally:
-                    await delete_session(client, base_url, user_id, environment)
+                session_id = None
+                for index, prompt in enumerate(prompts, start=1):
+                    result = await measure_prompt(
+                        client,
+                        base_url,
+                        user_id,
+                        environment,
+                        index,
+                        prompt,
+                        session_id,
+                    )
+                    session_id = result.get("session_id") or session_id
+                    result["run_id"] = run_id
+                    results.append(result)
+                    emit({"record_type": "request", **result})
     finally:
         if output:
             output.close()

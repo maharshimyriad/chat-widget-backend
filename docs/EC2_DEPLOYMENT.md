@@ -26,16 +26,15 @@ python -m pip check
 python -c "from app.main import app; print(app.title)"
 ```
 
-The import should print `Chat Widget API`. A warning that `REDIS_URL` is unset means session IDs fall back to process memory; configure Redis before production.
+The import should print `Chat Widget API`. Chat sessions and their history are stored by Agent Engine; PostgreSQL and Redis are not required.
 
 ## 2. Configure backend environment
 
-Create `.env` from `.env.example` and set the real project, location, Vertex AI resource, Redis URL, and website origins. Do not commit `.env`, ADC credentials, or service-account key files.
+Create `.env` from `.env.example` and set the real project, location, Vertex AI resource, and website origins. Do not commit `.env`, ADC credentials, or service-account key files.
 
 - `GOOGLE_CLOUD_PROJECT`: Google Cloud project ID used for API/quota context.
 - `GOOGLE_CLOUD_LOCATION`: Vertex AI location.
 - `VERTEX_AI_AGENT_RESOURCE`: deployed reasoning engine resource path.
-- `REDIS_URL`: durable Redis connection. In-memory fallback does not survive restarts and is not shared between instances.
 - `CORS_ALLOWED_ORIGINS`: comma-separated browser origins, without paths or trailing slashes.
 
 The frontend bundle separately needs `VITE_API_URL` set to the public HTTPS API URL ending in `/api/chat` when it is built.
@@ -151,6 +150,6 @@ Replace the example hostname. `npm ci` requires `package.json` and `package-lock
 - Python 3.11.14 was installed side by side with system Python 3.9; the app imported successfully and `pip check` reported no broken requirements.
 - Google Cloud CLI 587.0.0 was installed under `/home/ec2-user/google-cloud-sdk`; the app does not require the CLI at runtime when production ADC is configured properly.
 - `chat-widget-backend.service` was enabled and reported `active (running)`, bound to `127.0.0.1:8000`.
-- Redis was unset during the initial import, so configure durable Redis before relying on persistent sessions.
+- Session persistence and history restoration are handled by Agent Engine, with the widget retaining the session ID in local storage.
 - Complete the authenticated Vertex AI stream test, public reverse-proxy/TLS setup, production Workload Identity Federation, and frontend origin/CORS test before declaring deployment ready.
 - At the time this runbook was written, frontend `package.json` requested Vite `^8.3.0` while `package-lock.json` pinned `5.4.21`; `npm ci --dry-run` failed because of that mismatch. Reconcile and test both files, then commit them together before building on the server.

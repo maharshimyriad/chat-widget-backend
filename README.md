@@ -29,7 +29,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip check
 ```
 
-Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `VERTEX_AI_AGENT_RESOURCE`, `REDIS_URL`, and `CORS_ALLOWED_ORIGINS`. Keep `.env` and credentials out of source control.
+Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `VERTEX_AI_AGENT_RESOURCE`, and `CORS_ALLOWED_ORIGINS`. Keep `.env` and credentials out of source control.
 
 ## Run and test the API
 
@@ -37,7 +37,7 @@ Copy `.env.example` to `.env` and configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOU
 python -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 8000
 ```
 
-Check `http://127.0.0.1:8000/health`. The chat endpoint is `POST /api/chat` and returns an SSE stream; session deletion is `DELETE /api/session`. `script.py` remains as a compatibility entry point, but new commands should use `app.main:app`.
+Check `http://127.0.0.1:8000/health`. `POST /api/chat` accepts `user_id`, `environment_id`, `message`, and `session_id`, then streams JSON `session`, `message`, `error`, and `done` events. `GET /api/history` reads messages from the Agent Engine session. The widget owns session IDs in local storage; the backend does not store session IDs or transcript copies. `script.py` remains as a compatibility entry point, but new commands should use `app.main:app`.
 
 Run the latency benchmark from this directory with a running API:
 
@@ -49,7 +49,7 @@ python benchmark.py --base-url http://127.0.0.1:8000 --run-id smoke --output smo
 
 The Google Python client uses Application Default Credentials (ADC). For a temporary local or smoke test, ADC can be created with `gcloud auth application-default login`; set its quota project to the same Google Cloud project used by the app. Do not use a personal user login as the long-term EC2 service identity. Use AWS-to-Google Workload Identity Federation for production.
 
-If `REDIS_URL` is unset, the backend logs a warning and stores session IDs in process memory. Configure durable Redis for production or session continuity will be lost on restart and will not be shared across instances.
+Use the same stable `user_id` when creating a session and on every message. The widget prefixes its stable user ID with `client_id` and stores a separate Agent Engine session ID for each user and environment. Agent Engine is the source of truth for conversation history.
 
 ## EC2 deployment
 

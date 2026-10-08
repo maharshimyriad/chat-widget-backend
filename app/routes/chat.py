@@ -10,7 +10,6 @@ from fastapi.responses import StreamingResponse
 
 from app.config import DEPLOYED_RESOURCE_NAME, ENVIRONMENT_RESOURCES, PROJECT_ID
 from app.schemas import ChatRequest
-from app.session_store import load_session_id, remove_session_id, store_session_id
 from app.vertex_client import get_remote_app, stream_agent_query
 
 router = APIRouter()
@@ -78,21 +77,14 @@ def is_session_not_found(error: Exception) -> bool:
 
 async def create_session(
     remote_app,
-    session_key: tuple[str, str],
-    scoped_user_id: str,
+    user_id: str,
     environment_id: str,
-    profile: dict[str, str],
 ) -> str:
     session = await remote_app.async_create_session(
-        user_id=scoped_user_id,
-        state={
-            "home_environment": environment_id,
-            "allowed_environments": list(ENVIRONMENT_RESOURCES),
-            "user_profile": profile,
-        },
+        user_id=user_id,
+        state={"product_id": environment_id},
     )
     session_id = session["id"] if isinstance(session, dict) else session.id
-    await store_session_id(session_key, session_id)
     return session_id
 
 
@@ -106,7 +98,7 @@ async def create_session(
             "content": {
                 "text/event-stream": {
                     "schema": {"type": "string"},
-                    "example": 'data: {"text":"Hello"}\n\ndata: {"done":true}\n\n',
+                    "example": 'event: session\ndata: {"session_id":"abc"}\n\nevent: message\ndata: {"text":"Hello"}\n\nevent: done\ndata: {}\n\n',
                 }
             },
         }
@@ -119,7 +111,7 @@ async def chat(request: ChatRequest, http_request: Request):
             detail="user_id and message must not be blank",
         )
 
-    if request.environment not in ENVIRONMENT_RESOURCES:
+    if request.environment_id not in ENVIRONMENT_RESOURCES:
         raise HTTPException(
             status_code=400,
             detail="Unsupported environment_id",
@@ -133,26 +125,17 @@ async def chat(request: ChatRequest, http_request: Request):
         first_event_ms = None
         first_text_ms = None
         event_count = 0
-        scoped_user_id = f"{request.user_id}::{request.environment}"
-        session_key = (request.user_id, request.environment)
+        user_id = request.user_id
         try:
-            resource_name = (
-                ENVIRONMENT_RESOURCES.get(request.environment)
-                or DEPLOYED_RESOURCE_NAME
-            )
-            remote_app = get_remote_app(resource_name)
-            session_id = await load_session_id(session_key)
-            if not session_id:
+            remote_app = get_remote_app(DEPLOYED_RESOURCE_NAME)
+            session_id = request.session_id
+            if session_id is None:
                 session_id = await create_session(
                     remote_app,
-                    session_key,
-                    scoped_user_id,
-                    request.environment,
-                    {
-                        key: request.profile.get(key, "")
-                        for key in ("name", "role", "organization")
-                    },
+                    user_id,
+                    request.environment_id,
                 )
+            yield f'event: session\ndata: {json.dumps({"session_id": session_id})}\n\n'
 
             retried_session = False
             saw_partial = False
@@ -161,7 +144,7 @@ async def chat(request: ChatRequest, http_request: Request):
                     async for chunk in stream_agent_query(
                         remote_app,
                         request.message,
-                        scoped_user_id,
+                        user_id,
                         session_id,
                     ):
                         event_count += 1
@@ -200,13 +183,6 @@ async def chat(request: ChatRequest, http_request: Request):
                                 if part.get("thought", False):
                                     continue
 
-                                function_call = part.get("function_call")
-                                if isinstance(function_call, dict):
-                                    yield (
-                                        "event: function_call\n"
-                                        f"data: {json.dumps(function_call)}\n\n"
-                                    )
-
                                 text = part.get("text")
                                 if not isinstance(text, str) or not text:
                                     continue
@@ -216,25 +192,20 @@ async def chat(request: ChatRequest, http_request: Request):
                                     saw_partial = True
                                 if first_text_ms is None:
                                     first_text_ms = (perf_counter() - request_started) * 1000
-                                yield f"data: {json.dumps({'text': text})}\n\n"
+                                yield f'event: message\ndata: {json.dumps({"text": text})}\n\n'
                     break
                 except Exception as error:
                     if retried_session or event_count or not is_session_not_found(error):
                         raise
-                    await remove_session_id(session_key)
                     session_id = await create_session(
                         remote_app,
-                        session_key,
-                        scoped_user_id,
-                        request.environment,
-                        {
-                            key: request.profile.get(key, "")
-                            for key in ("name", "role", "organization")
-                        },
+                        user_id,
+                        request.environment_id,
                     )
+                    yield f'event: session\ndata: {json.dumps({"session_id": session_id})}\n\n'
                     retried_session = True
 
-            yield 'data: {"done": true}\n\n'
+            yield "event: done\ndata: {}\n\n"
         except Exception:
             log_chat_event(
                 "ERROR",
@@ -250,7 +221,7 @@ async def chat(request: ChatRequest, http_request: Request):
                 "chat_request_complete",
                 request_id,
                 trace_fields,
-                environment=request.environment,
+                environment=request.environment_id,
                 time_to_first_event_ms=round(first_event_ms) if first_event_ms is not None else None,
                 time_to_first_text_ms=round(first_text_ms) if first_text_ms is not None else None,
                 total_time_ms=round((perf_counter() - request_started) * 1000),

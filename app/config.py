@@ -7,8 +7,6 @@ DEPLOYED_RESOURCE_NAME = os.getenv(
     "projects/80153651050/locations/us-west1/"
     "reasoningEngines/3287350651050262528",
 )
-REDIS_URL = os.getenv("REDIS_URL")
-
 ENVIRONMENT_RESOURCES = {
     "dam": None,
     "eponymos": None,

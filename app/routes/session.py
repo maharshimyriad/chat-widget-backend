@@ -1,42 +1,57 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.config import DEPLOYED_RESOURCE_NAME, ENVIRONMENT_RESOURCES
-from app.schemas import SessionRequest
-from app.session_store import load_session_id, remove_session_id
 from app.vertex_client import get_remote_app
 
 router = APIRouter()
 
 
-def is_session_not_found(error: Exception) -> bool:
-    message = str(error).lower()
-    return "not found" in message or "not_found" in message
+def as_mapping(value):
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json", exclude_none=True)
+    if hasattr(value, "to_dict"):
+        return value.to_dict()
+    return {}
 
 
-@router.delete("/api/session", include_in_schema=False)
-@router.delete("/session")
-async def clear_session(request: SessionRequest):
-    if request.environment not in ENVIRONMENT_RESOURCES:
+@router.get("/api/history", include_in_schema=False)
+@router.get("/history")
+async def get_history(
+    user_id: str = Query(min_length=1, max_length=256),
+    environment_id: str = Query(min_length=1, max_length=64),
+    session_id: str | None = Query(default=None, min_length=1, max_length=256),
+):
+    if environment_id not in ENVIRONMENT_RESOURCES:
         raise HTTPException(status_code=400, detail="Unsupported environment_id")
-
-    session_key = (request.user_id, request.environment)
-    session_id = await load_session_id(session_key)
     if not session_id:
-        return {"deleted": False}
+        return {"messages": []}
 
-    resource_name = (
-        ENVIRONMENT_RESOURCES.get(request.environment)
-        or DEPLOYED_RESOURCE_NAME
-    )
-    remote_app = get_remote_app(resource_name)
-    scoped_user_id = f"{request.user_id}::{request.environment}"
+    remote_app = get_remote_app(DEPLOYED_RESOURCE_NAME)
     try:
-        await remote_app.async_delete_session(
-            user_id=scoped_user_id,
+        session = await remote_app.async_get_session(
+            user_id=user_id,
             session_id=session_id,
         )
     except Exception as error:
-        if not is_session_not_found(error):
-            raise HTTPException(status_code=502, detail="Unable to delete chat session") from error
-    await remove_session_id(session_key)
-    return {"deleted": True}
+        raise HTTPException(status_code=502, detail="Unable to load chat history") from error
+
+    events = as_mapping(session).get("events", [])
+    messages = []
+    for event in events if isinstance(events, list) else []:
+        event_data = as_mapping(event)
+        content = as_mapping(event_data.get("content"))
+        parts = content.get("parts", [])
+        role = "user" if event_data.get("author") == "user" or content.get("role") == "user" else "assistant"
+        text = "".join(
+            part.get("text", "")
+            for part in parts
+            if isinstance(part, dict)
+            and not part.get("thought", False)
+            and isinstance(part.get("text"), str)
+        ) if isinstance(parts, list) else ""
+        if text:
+            messages.append({"role": role, "content": text})
+
+    return {"messages": messages}
