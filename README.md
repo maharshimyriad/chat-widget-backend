@@ -49,7 +49,7 @@ python benchmark.py --base-url http://127.0.0.1:8000 --run-id smoke --output smo
 
 The Google Python client uses Application Default Credentials (ADC). For a temporary local or smoke test, ADC can be created with `gcloud auth application-default login`; set its quota project to the same Google Cloud project used by the app. Do not use a personal user login as the long-term EC2 service identity. Use AWS-to-Google Workload Identity Federation for production.
 
-Use the same stable `user_id` when creating a session and on every message. The widget prefixes its stable user ID with `client_id` and stores a separate Agent Engine session ID for each user and environment. Agent Engine is the source of truth for conversation history.
+Use the same stable global `user_id` when creating a session and on every message. The widget sends the supplied `data-user-id` unchanged and stores a separate Agent Engine session ID for each user and environment. Agent Engine is the source of truth for conversation history.
 
 ## EC2 deployment
 
